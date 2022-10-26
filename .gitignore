@@ -127,3 +127,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+covid_articles_raw.csv
+covid_articles_raw.json
