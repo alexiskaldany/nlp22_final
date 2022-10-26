@@ -13,6 +13,12 @@ pip3 freeze > requirements.txt
 `pip install --upgrade pip`
 `pip install -r requirements.txt`
 
-1. To download the data:
-    - download link:"https://www.kaggle.com/datasets/timmayer/covid-news-articles-2020-2022?resource=download"
-    - unzip the csv into this directory
+* To download the data: 
+    1. download link:"https://www.kaggle.com/datasets/timmayer/covid-news-articles-2020-2022?resource=download"
+    2. unzip the csv into this directory
+
+First Model: Classification model using transformers from huggingface
+
+Second Model: Some sort of classical NLP model
+
+Third Model: A custom built LSTM using Pytorch
