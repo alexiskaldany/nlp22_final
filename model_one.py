@@ -23,11 +23,13 @@ tech,52258
 science,8096
 esg,2045
 """
+label2id = {"business": 0, "general": 1, "tech": 2, "science": 3, "esg": 4}
+id2label={0: "business", 1: "general", 2: "tech", 3: "science", 4: "esg"}
+#############
 configuration = DistilBertConfig(
     num_labels=5,
-    problem_type="multi_label_classification",
-    id2label={0: "business", 1: "general", 2: "tech", 3: "science", 4: "esg"},
-    label2id={"business": 0, "general": 1, "tech": 2, "science": 3, "esg": 4},
+    id2label=id2label,
+    label2id=label2id,
     max_position_embeddings=512,
 )
 
@@ -49,6 +51,8 @@ labels = torch.nn.functional.one_hot(
 logits = model(**first_content_tokens,labels=labels).logits
 prediction = model.config.id2label[logits.argmax().item()]
 print(prediction)
+
+##################
 # loss = model(**first_content_tokens, labels=labels)[0]
 # print(loss)
 
@@ -73,7 +77,7 @@ class CustomDataLoader(Dataset):
     CustomDataLoader object
     """
 
-    def __init__(self, dataframe: pd.DataFrame, tokenizer, max_len: int = 512):
+    def __init__(self, dataframe: pd.DataFrame, tokenizer, max_len: int = 512,label2id: dict = None):
         """
         Params:
             dataframe (pd.DataFrame): whichever slice of the data
@@ -85,6 +89,7 @@ class CustomDataLoader(Dataset):
         self.content = dataframe["content"]
         self.target = self.data["category"]
         self.max_len = max_len
+        self.label2id = label2id
 
     def __len__(self):
         """
@@ -96,12 +101,17 @@ class CustomDataLoader(Dataset):
         return len(self.content)
 
     def __getitem__(self, index):
-        tokenized_content = self.tokenizer(
+        inputs = self.tokenizer(
             self.content[index],
             max_length=self.max_len,
-            padding="max_length",
+            return_tensors="pt",
+            padding=True,
             truncation=True,
         )
+        inputs["labels"] = torch.nn.functional.one_hot(torch.tensor([self.label2id[self.target[index]]]), num_classes=5).to(torch.float)
+        return inputs
+
+
 
 
 # print(datacollator)
