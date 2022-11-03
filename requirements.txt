@@ -6,6 +6,7 @@ filelock==3.8.0
 huggingface-hub==0.10.1
 idna==3.4
 kaggle==1.5.12
+loguru==0.6.0
 mypy-extensions==0.4.3
 numpy==1.23.4
 packaging==21.3

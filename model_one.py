@@ -1,24 +1,20 @@
+import gc
+import os
+import sys
+import time
+
+import pandas as pd
+import torch
+from loguru import logger
+from torch.optim import AdamW
+from torch.utils.data import Dataset
 from transformers import (
-    DistilBertModel,
-    DistilBertConfig,
-    TrainingArguments,
-    Trainer,
     DistilBertForSequenceClassification,
     DistilBertTokenizer,
     DistilBertConfig,
     get_scheduler,
 )
-from loguru import logger
-import torch
-import gc
-from torch.optim import AdamW
-from torch.utils.data import Dataset
-import pandas as pd
-import os
-import time
-import sys
-import numpy as np
-
+from typing import List, Tuple, Dict, Any, Optional
 logger.remove()
 logger.add(
     sys.stdout,
@@ -33,57 +29,10 @@ TODO:
 1. Build better statistics for output
 2. Determine tradeoff  between size and accuracy (taking a long time to train)
 3. Possibly use a fast tokenizer or some smaller transfomer
+4. Save model weights
+5. Create testing method
 
 """
-#############
-# configuration = DistilBertConfig(
-#     num_labels=5,
-#     id2label=id2label,
-#     label2id=label2id,
-#     max_position_embeddings=2048,
-# )
-
-# model = DistilBertForSequenceClassification(config=configuration)
-
-# tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased",model_max_length=2048)
-
-# data_250 = pd.read_csv("covid_articles_raw_first_250_.csv", encoding="utf-8")
-
-# first_content = data_250["content"][0]
-# first_content_tokens = tokenizer(first_content, return_tensors="pt", padding=True, truncation=True,max_length=2048)
-
-# first_category = data_250["category"][0]
-# first_category_id = configuration.label2id[first_category]
-# labels = torch.nn.functional.one_hot(
-#     torch.tensor([first_category_id]), num_classes=5
-# ).to(torch.float)
-# first_content_tokens["labels"] = labels
-
-# logits = model(**first_content_tokens).logits
-
-# # logits = model(**first_content_tokens,labels=labels).logits
-# prediction = model.config.id2label[logits.argmax().item()]
-# print(prediction)
-
-##################
-# loss = model(**first_content_tokens, labels=labels)[0]
-# print(loss)
-
-# logits = model(**first_content_tokens, labels=labels)
-# prediction = torch.argmax(logits.logits, dim=1)
-# print(prediction)
-
-
-# print(configuration.id2label)
-# configuration.label2id = {0: 'business', 1: 'general', 2: 'tech', 3: 'science', 4: 'esg'}
-# print(configuration.label2id)
-
-# dataset = pd.read_csv('covid_articles_train.csv', encoding='utf-8')
-
-# train_dataset = dataset.sample(frac=0.8, random_state=0)
-# val_dataset = dataset.drop(train_dataset.index).sample(frac=0.5, random_state=0)
-# test_dataset = dataset.drop(train_dataset.index).drop(val_dataset.index)
-
 
 class CustomDataLoader(Dataset):
     """
@@ -91,11 +40,11 @@ class CustomDataLoader(Dataset):
     """
 
     def __init__(
-        self,
-        dataframe: pd.DataFrame,
-        tokenizer,
-        max_len: int = 2048,
-        label2id: dict = None,
+            self,
+            dataframe: pd.DataFrame,
+            tokenizer,
+            max_len: int = 2048,
+            label2id: dict = None,
     ):
         """
         Params:
@@ -135,19 +84,19 @@ class CustomDataLoader(Dataset):
         return inputs
 
 
-class Training_DistilBert:
+class TrainingDistilBert:
     """
     Object to hold model, tokenizer, and dataloaders
     """
 
     def __init__(
-        self,
-        config,
-        model,
-        max_len,
-        train_dataloader,
-        val_dataloader,
-        test_dataloader,
+            self,
+            config,
+            model,
+            max_len,
+            train_dataloader,
+            val_dataloader,
+            test_dataloader,
     ):
         """
         config: DistilBertConfig object
@@ -156,7 +105,6 @@ class Training_DistilBert:
         train_dataloader: CustomDataLoader object
         val_dataloader: CustomDataLoader object
         test_dataloader: CustomDataLoader object
-        update_index: int
         """
         self.config = config
         self.model = model
@@ -164,7 +112,7 @@ class Training_DistilBert:
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.test_dataloader = test_dataloader
-        self.metric_list = [] 
+        self.metric_list = []
         logger.info("Initialized DistilBertForSequenceClassification object")
 
     def set_train_parameters(self, num_epochs=1, lr=5e-5, optimizer=None):
@@ -177,7 +125,7 @@ class Training_DistilBert:
         self.num_training_steps = self.num_epochs * len(self.train_dataloader)
         self.num_validation_steps = self.num_epochs * len(self.val_dataloader)
         self.num_steps_total = self.num_epochs * (
-            len(self.train_dataloader) + len(self.val_dataloader)
+                len(self.train_dataloader) + len(self.val_dataloader)
         )
         self.lr = lr
         self.optimizer = optimizer
@@ -188,13 +136,13 @@ class Training_DistilBert:
         logger.info("Set training parameters")
 
     def tracking_outputs(
-        self,
-        outputs,
-        epoch,
-        index,
-        mode,
-        total_epoch_loss,
-        elapsed_time,
+            self,
+            outputs,
+            epoch,
+            index,
+            mode,
+            total_epoch_loss,
+            elapsed_time,
     ):
         metric_dict = {}
         metric_dict["mode"] = mode
@@ -218,7 +166,7 @@ class Training_DistilBert:
         self.metric_list.append(metric_dict)
 
     def update_to_terminal(
-        self, current_epoch: int, current_index: int, mode: str, elapsed_time: int
+            self, current_epoch: int, current_index: int, mode: str, elapsed_time: int
     ) -> None:
         logger.debug(f"self.metric_list: {self.metric_list}")
         if self.metric_list == []:
@@ -242,40 +190,43 @@ class Training_DistilBert:
             else self.val_dataloader.__len__()
         )
         whole_epoch_length = (
-            self.train_dataloader.__len__() + self.val_dataloader.__len__()
+                self.train_dataloader.__len__() + self.val_dataloader.__len__()
         )
         number_of_steps_run = (current_epoch) * whole_epoch_length + current_index
         remaining_steps = self.num_steps_total - number_of_steps_run
         average_time_per_step = number_of_steps_run / elapsed_time
         remaining_time_seconds = remaining_steps * average_time_per_step
         minutes, seconds = divmod(remaining_time_seconds, 60)
-        minutes = round(int(minutes),0)
-        seconds = round(int(seconds),0)
-        number_of_correct_predictions = updated_to_terminal[updated_to_terminal['epoch'] == current_epoch]["true_positive"].sum()
+        minutes = round(int(minutes), 0)
+        seconds = round(int(seconds), 0)
+        number_of_correct_predictions = updated_to_terminal[updated_to_terminal['epoch'] == current_epoch][
+            "true_positive"].sum()
         if number_of_correct_predictions == 0 or current_index == 0:
             accuracy = 0
         else:
             accuracy = number_of_correct_predictions / current_index
         logger.info(
-            f"{self.step_count} | {minutes}:{seconds} remaining | E: {current_epoch} | {mode.capitalize()} | {round(self.step_count / self.num_steps_total, 2)} | T: {number_of_correct_predictions} | F: {current_index - number_of_correct_predictions} | Accuracy: {round(accuracy,2)}")
-    
+            f"{self.step_count} | {minutes}:{seconds} remaining | E: {current_epoch} | {mode.capitalize()} | {round(self.step_count / self.num_steps_total, 2)} | T: {number_of_correct_predictions} | F: {current_index - number_of_correct_predictions} | Accuracy: {round(accuracy, 2)}")
+
     def create_epoch_statistics(self, current_epoch: int) -> None:
-        epoch_statistics = pd.DataFrame(columns = ['epoch', 'mode', 'accuracy', 'loss', 'elapsed_time'])
+        epoch_statistics = pd.DataFrame(columns=['epoch', 'mode', 'accuracy', 'loss', 'elapsed_time'])
         df = pd.DataFrame(self.metric_list)
         epoch_dfs = [df[df["epoch"] == epoch] for epoch in df["epoch"].unique()]
-        for index,epoch in enumerate(epoch_dfs):
+        for index, epoch in enumerate(epoch_dfs):
             train_df = epoch[epoch["mode"] == "train"]
             train_df['cumsum_tp'] = train_df['true_positive'].cumsum()
             train_df['accuracy'] = train_df['cumsum_tp'] / train_df.index
-            epoch_statistics.loc[index] = [current_epoch, "train", train_df['accuracy'].iloc[-1], train_df['loss'].iloc[-1], train_df['elapsed_time'].iloc[-1]]
-            
+            epoch_statistics.loc[index] = [current_epoch, "train", train_df['accuracy'].iloc[-1],
+                                           train_df['loss'].iloc[-1], train_df['elapsed_time'].iloc[-1]]
+
             val_df = epoch[epoch["mode"] == "val"]
             val_df['cumsum_tp'] = val_df['true_positive'].cumsum()
             val_df['accuracy'] = val_df['cumsum_tp'] / val_df.index
-            epoch_statistics.loc[index + 1] = [current_epoch, "val", val_df['accuracy'].iloc[-1], val_df['loss'].iloc[-1], val_df['elapsed_time'].iloc[-1]]
+            epoch_statistics.loc[index + 1] = [current_epoch, "val", val_df['accuracy'].iloc[-1],
+                                               val_df['loss'].iloc[-1], val_df['elapsed_time'].iloc[-1]]
         self.epoch_statistics = epoch_statistics
-        self.epoch_statistics.to_csv(os.getcwd()+"/epoch_statistics.csv", index=False)
-    
+        self.epoch_statistics.to_csv(os.getcwd() + "/epoch_statistics.csv", index=False)
+
     def saving_stats(self, save_path: str) -> pd.DataFrame:
         headers = [
             "mode",
@@ -292,12 +243,12 @@ class Training_DistilBert:
         df.to_csv(save_path)
         logger.info(f"Saved metrics to {save_path}")
         return df
-       
+
     def train(
-        self,
-        eval_during_training: bool = False,
-        save_weights: bool = True,
-        model_weights_dir="./results/model_weights/",
+            self,
+            eval_during_training: bool = False,
+            save_weights: bool = True,
+            model_weights_dir="./results/model_weights/",
     ):
         lr_scheduler = get_scheduler(
             name="linear",
@@ -321,7 +272,7 @@ class Training_DistilBert:
         ### Train
         for epoch in range(self.num_epochs):
             epoch_start = time.time()
-            logger.info(f"Starting epoch {epoch+1}/{self.num_epochs}")
+            logger.info(f"Starting epoch {epoch + 1}/{self.num_epochs}")
             logger.info("Training...")
             total_train_loss = 0
             self.model.train()
@@ -342,7 +293,7 @@ class Training_DistilBert:
                 self.tracking_outputs(
                     outputs, epoch, index, "train", total_train_loss, elapsed_time
                 )
-            logger.info(f"Finished training epoch {epoch+1}")
+            logger.info(f"Finished training epoch {epoch + 1}")
             logger.info("Validating...")
             ### Validate
             self.model.eval()
@@ -361,16 +312,14 @@ class Training_DistilBert:
                 self.tracking_outputs(
                     outputs, epoch, index, "val", total_eval_loss, elapsed_time
                 )
-            
-            logger.info(f"Finished validating epoch {epoch+1}")
+
+            logger.info(f"Finished validating epoch {epoch + 1}")
             # if save_weights:
             #     self.model.save_pretrained(model_weights_dir)
             #     self.tokenizer.save_pretrained(model_weights_dir)
             #     logger.info(f"Saved model weights to {model_weights_dir}")
             # self.create_epoch_statistics()
         logger.info("Finished training")
-
-    
 
 
 ### Configs
@@ -391,7 +340,7 @@ configuration = DistilBertConfig(
 save_path = os.getcwd() + "/DistilBert_Model_25000_51_epochs_stats.csv"
 logger.info(f" Save path: {save_path}")
 # csv_path = os.getcwd() + "/covid_articles_raw.csv"
-csv_path = os.getcwd()+'/covid_articles_raw_first_250_.csv'
+csv_path = os.getcwd() + '/covid_articles_raw_first_250_.csv'
 logger.info(f"Loading data from {csv_path}")
 dataset = pd.read_csv(csv_path, encoding="utf-8")[:100]
 logger.info(f"Loaded {len(dataset)} rows of data")
@@ -409,7 +358,7 @@ test_dataloader = CustomDataLoader(test_dataset, tokenizer, max_len, label2id)
 
 ### Training
 model = DistilBertForSequenceClassification(config=configuration)
-DistilBert_Model = Training_DistilBert(
+DistilBert_Model = TrainingDistilBert(
     config=configuration,
     model=model,
     train_dataloader=train_dataloader,
