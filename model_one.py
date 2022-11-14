@@ -302,7 +302,7 @@ class TrainingDistilBert:
             for index, batch in enumerate(self.val_dataloader):
                 [batch[key][0].to(device) for key in batch.keys()]
                 with torch.no_grad():
-                    outputs = self.model(**batch)
+                    outputs = self.model(**batch.to(device))
                     loss = outputs[0]
                     logits = outputs[1]
                     total_eval_loss += loss.item()
@@ -320,7 +320,6 @@ class TrainingDistilBert:
             #     logger.info(f"Saved model weights to {model_weights_dir}")
             # self.create_epoch_statistics()
         logger.info("Finished training")
-
 
 ### Configs
 max_len = 2048
