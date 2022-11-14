@@ -2,7 +2,6 @@ import gc
 import os
 import sys
 import time
-
 import pandas as pd
 import torch
 from loguru import logger
@@ -14,6 +13,7 @@ from transformers import (
     DistilBertConfig,
     get_scheduler,
 )
+
 from typing import List, Tuple, Dict, Any, Optional
 logger.remove()
 logger.add(
@@ -258,16 +258,20 @@ class TrainingDistilBert:
         )
 
         self.model.resize_token_embeddings(len(train_dataloader.tokenizer))
-        device = (
-            torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        )
-
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            torch.cuda.empty_cache()
+            self.model.to(device)
+        # if torch.has_mps:
+        #     mps_device = torch.device("mps")
+        #     device = "mps"
+        #     self.model.to(mps_device)
+        else:
+            device = torch.device("cpu")
+            self.model.to(device)
         logger.info(f"Using device..{device}")
-
-        self.model.to(device)
         train_start = time.time()
         gc.collect()
-        torch.cuda.empty_cache()
         self.step_count = 0
         ### Train
         for epoch in range(self.num_epochs):
@@ -287,7 +291,6 @@ class TrainingDistilBert:
                 self.optimizer.step()
                 lr_scheduler.step()
                 current_time = time.time()
-                epoch_time = current_time - epoch_start
                 elapsed_time = current_time - train_start
                 self.update_to_terminal(epoch, index, "train", elapsed_time)
                 self.tracking_outputs(
@@ -337,7 +340,7 @@ configuration = DistilBertConfig(
 )
 # update_index = 5
 ### Loading the data
-save_path = os.getcwd() + "/DistilBert_Model_25000_51_epochs_stats.csv"
+save_path = os.getcwd() + "/testerino_epochs_stats.csv"
 logger.info(f" Save path: {save_path}")
 # csv_path = os.getcwd() + "/covid_articles_raw.csv"
 csv_path = os.getcwd() + '/covid_articles_raw_first_250_.csv'
