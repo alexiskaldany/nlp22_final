@@ -31,7 +31,6 @@ TODO:
 3. Possibly use a fast tokenizer or some smaller transfomer
 4. Save model weights
 5. Create testing method
-
 """
 
 class CustomDataLoader(Dataset):
@@ -196,17 +195,25 @@ class TrainingDistilBert:
         remaining_steps = self.num_steps_total - number_of_steps_run
         average_time_per_step = number_of_steps_run / elapsed_time
         remaining_time_seconds = remaining_steps * average_time_per_step
-        minutes, seconds = divmod(remaining_time_seconds, 60)
-        minutes = round(int(minutes), 0)
-        seconds = round(int(seconds), 0)
+        # minutes, seconds = divmod(remaining_time_seconds, 60)
+        minutes = round(int(remaining_time_seconds)/60, 0)
+        # seconds = round(int(seconds), 0)
         number_of_correct_predictions = updated_to_terminal[updated_to_terminal['epoch'] == current_epoch][
             "true_positive"].sum()
         if number_of_correct_predictions == 0 or current_index == 0:
             accuracy = 0
         else:
-            accuracy = number_of_correct_predictions / current_index
+            # accuracy = number_of_correct_predictions / current_index
+            if current_index < 200:
+                accuracy = updated_to_terminal[updated_to_terminal['epoch'] == current_epoch][
+                "true_positive"].sum() / current_index
+            else:
+                accuracy = updated_to_terminal[updated_to_terminal['epoch'] == current_epoch][
+                "true_positive"][-200:].sum() / 200
+            
+            
         logger.info(
-            f"{self.step_count} | {minutes}:{seconds} remaining | E: {current_epoch} | {mode.capitalize()} | {round(self.step_count / self.num_steps_total, 2)} | T: {number_of_correct_predictions} | F: {current_index - number_of_correct_predictions} | Accuracy: {round(accuracy, 2)}")
+            f"{self.step_count} | {minutes} min remaining | E: {current_epoch} | {mode.capitalize()} | {round(self.step_count / self.num_steps_total, 3)} | T: {number_of_correct_predictions} | F: {current_index - number_of_correct_predictions} | Accuracy: {round(accuracy, 2)}")
 
     def create_epoch_statistics(self, current_epoch: int) -> None:
         epoch_statistics = pd.DataFrame(columns=['epoch', 'mode', 'accuracy', 'loss', 'elapsed_time'])
@@ -278,8 +285,6 @@ class TrainingDistilBert:
             self.model.train()
             for index, batch in enumerate(self.train_dataloader):
                 self.step_count += 1
-                # [batch[key][0].to(device) for key in batch.keys()]
-                # [v.to(device) for v in batch.values()]
                 self.model.zero_grad()
                 outputs = self.model(**batch.to(device))
                 loss = outputs[0]
@@ -289,7 +294,8 @@ class TrainingDistilBert:
                 lr_scheduler.step()
                 current_time = time.time()
                 elapsed_time = current_time - train_start
-                self.update_to_terminal(epoch, index, "train", elapsed_time)
+                if index % 10 == 0:
+                    self.update_to_terminal(epoch, index, "train", elapsed_time)
                 self.tracking_outputs(
                     outputs, epoch, index, "train", total_train_loss, elapsed_time
                 )
@@ -300,7 +306,6 @@ class TrainingDistilBert:
             total_eval_loss = 0
             # Evaluate data for one epoch
             for index, batch in enumerate(self.val_dataloader):
-                [batch[key][0].to(device) for key in batch.keys()]
                 with torch.no_grad():
                     outputs = self.model(**batch.to(device))
                     loss = outputs[0]
@@ -308,7 +313,8 @@ class TrainingDistilBert:
                     total_eval_loss += loss.item()
                 elapsed_time = current_time - train_start
                 self.step_count += 1
-                self.update_to_terminal(epoch, index, "val", elapsed_time)
+                if index % 10 == 0: 
+                    self.update_to_terminal(epoch, index, "val", elapsed_time)
                 self.tracking_outputs(
                     outputs, epoch, index, "val", total_eval_loss, elapsed_time
                 )
@@ -322,7 +328,7 @@ class TrainingDistilBert:
         logger.info("Finished training")
 
 ### Configs
-max_len = 2048
+max_len = 1028
 label2id = {"business": 0, "general": 1, "tech": 2, "science": 3, "esg": 4}
 id2label = {0: "business", 1: "general", 2: "tech", 3: "science", 4: "esg"}
 tokenizer = DistilBertTokenizer.from_pretrained(
@@ -338,10 +344,10 @@ configuration = DistilBertConfig(
 ### Loading the data
 save_path = os.getcwd() + "/testerino_epochs_stats.csv"
 logger.info(f" Save path: {save_path}")
-# csv_path = os.getcwd() + "/covid_articles_raw.csv"
-csv_path = os.getcwd() + '/covid_articles_raw_first_250_.csv'
+csv_path = os.getcwd() + "/covid_articles_raw.csv"
+# csv_path = os.getcwd() + '/covid_articles_raw_first_250_.csv'
 logger.info(f"Loading data from {csv_path}")
-dataset = pd.read_csv(csv_path, encoding="utf-8")[:100]
+dataset = pd.read_csv(csv_path, encoding="utf-8")[:50000]
 logger.info(f"Loaded {len(dataset)} rows of data")
 
 train_dataset = dataset.sample(frac=0.8, random_state=0)
