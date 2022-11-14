@@ -278,7 +278,8 @@ class TrainingDistilBert:
             self.model.train()
             for index, batch in enumerate(self.train_dataloader):
                 self.step_count += 1
-                [batch[key][0].to(device) for key in batch.keys()]
+                # [batch[key][0].to(device) for key in batch.keys()]
+                [v.to(device) for v in batch.values()]
                 self.model.zero_grad()
                 outputs = self.model(**batch)
                 loss = outputs[0]
