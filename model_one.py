@@ -261,17 +261,13 @@ class TrainingDistilBert:
         if torch.cuda.is_available():
             device = torch.device("cuda")
             torch.cuda.empty_cache()
-            self.model.to(device)
-        # if torch.has_mps:
-        #     mps_device = torch.device("mps")
-        #     device = "mps"
-        #     self.model.to(mps_device)
-        else:
+        if not torch.cuda.is_available():
             device = torch.device("cpu")
-            self.model.to(device)
         logger.info(f"Using device..{device}")
+        self.model.to(device)
         train_start = time.time()
         gc.collect()
+        torch.cuda.empty_cache()
         self.step_count = 0
         ### Train
         for epoch in range(self.num_epochs):
