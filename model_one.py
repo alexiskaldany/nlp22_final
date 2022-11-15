@@ -1,3 +1,11 @@
+""" 
+model_one.py
+A text classifier model
+Data: https://www.kaggle.com/datasets/timmayer/covid-news-articles-2020-2022
+author: @alexiskaldany
+created on 10/26/2022
+"""
+
 import gc
 import os
 import sys
@@ -15,7 +23,6 @@ from transformers import (
     get_scheduler,
 )
 
-from typing import List, Tuple, Dict, Any, Optional
 
 logger.remove()
 logger.add(
@@ -311,9 +318,11 @@ class TrainingDistilBert:
         if torch.cuda.is_available():
             device = torch.device("cuda")
             torch.cuda.empty_cache()
+        if torch.has_mps:
+            device = torch.device("mps")
         if not torch.cuda.is_available():
             device = torch.device("cpu")
-        logger.info(f"Using device..{device}")
+        logger.warning(f"Using device..{device}")
         self.model.to(device)
         train_start = time.time()
         gc.collect()
