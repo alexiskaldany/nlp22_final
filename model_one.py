@@ -404,7 +404,20 @@ configuration = DistilBertConfig(
 ### Loading the data
 save_path = os.getcwd() + "/testerino_epochs_stats.csv"
 logger.info(f" Save path: {save_path}")
-csv_path = os.getcwd() + "/covid_articles_raw.csv"
+
+# Kaggle Api (Download Data from Kaggle, Run only 1 time)
+import os
+os.environ['KAGGLE_USERNAME'] = 'koyanjo'
+os.environ['KAGGLE_KEY'] = '33bfba07e0815efc297a1a4488dbe6a3'
+import kaggle
+from kaggle.api.kaggle_api_extended import KaggleApi
+api = KaggleApi()
+api.authenticate()
+api.dataset_download_files('timmayer/covid-news-articles-2020-2022')
+import zipfile
+with zipfile.ZipFile('covid-news-articles-2020-2022.zip', 'r') as zipref:
+    zipref.extractall()
+csv_path = os.getcwd() + "/covid_articles_raw.csv" # Windows swtich / to \
 # csv_path = os.getcwd() + "/covid_articles_raw_first_250_.csv"
 logger.info(f"Loading data from {csv_path}")
 dataset = pd.read_csv(csv_path, encoding="utf-8")[:500]
