@@ -59,9 +59,10 @@ from torchmetrics import Perplexity
 metrics = Perplexity()
 max_len = int ( 2048 )
 lr = float ( 1e-5 )
-tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
-config = BartConfig.from_pretrained("facebook/bart-large-cnn")
-model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn", config=config)
+tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn", max_len = max_len, truncation = True, padding = "max_length")
+config = BartConfig.from_pretrained("facebook/bart-large-cnn",max_position_embeddings = max_len,)
+model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn", config=config,ignore_mismatched_sizes = True)
+print(model.modules)
 optimizer = AdamW(model.parameters(), lr=lr)
 class summarizationDataLoader(Dataset):
     """
@@ -91,6 +92,15 @@ class summarizationDataLoader(Dataset):
         )['input_ids']
         return inputs
     
+    def __len__(self):
+        """
+        Params:
+            self: instance of object
+        Returns:
+            number of samples
+        """
+        return len(self.content)
+    
 ### Loading the data
 save_path = os.getcwd() + "/seq2seq_results.csv"
 print(f"Save path: {save_path}")
@@ -108,7 +118,7 @@ test_dataset = dataset.drop(train_dataset.index).drop(val_dataset.index)
 print(f"Loaded {len(test_dataset)} rows of test data")
 
 train_dataloader = summarizationDataLoader(train_dataset, tokenizer, max_len)
-print(train_dataloader[0])
+print([x.shape for x in train_dataloader[1].values()])
 val_dataloader = summarizationDataLoader(val_dataset, tokenizer, max_len)
 test_dataloader = summarizationDataLoader(test_dataset, tokenizer, max_len)
 
