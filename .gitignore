@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 covid_articles_raw.csv
 covid_articles_raw.json
+covid-news-articles-2020-2022.zip
