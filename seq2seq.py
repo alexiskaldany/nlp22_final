@@ -51,7 +51,6 @@ import torch
 from tqdm import tqdm
 import gc
 from transformers import BartForConditionalGeneration, BartTokenizer, BartConfig,get_scheduler
-from transformers.trainer_seq2seq import Seq2SeqTrainer
 import os
 from torchmetrics import Perplexity
 
@@ -60,7 +59,9 @@ metrics = Perplexity()
 max_len = int ( 2048 )
 lr = float ( 1e-5 )
 tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn", max_len = max_len, truncation = True, padding = "max_length")
-config = BartConfig.from_pretrained("facebook/bart-large-cnn",max_position_embeddings = max_len,)
+
+config = BartConfig.from_pretrained("facebook/bart-large-cnn",max_position_embeddings = max_len)
+
 model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn", config=config,ignore_mismatched_sizes = True)
 print(model.modules)
 optimizer = AdamW(model.parameters(), lr=lr)
@@ -104,10 +105,10 @@ class summarizationDataLoader(Dataset):
 ### Loading the data
 save_path = os.getcwd() + "/seq2seq_results.csv"
 print(f"Save path: {save_path}")
-# csv_path = os.getcwd() + "/covid_articles_raw.csv"
-csv_path = os.getcwd() + "/covid_articles_raw_first_250_.csv"
+csv_path = os.getcwd() + "/covid_articles_raw.csv"
+# csv_path = os.getcwd() + "/covid_articles_raw_first_250_.csv"
 print(f"Loading data from {csv_path}")
-dataset = pd.read_csv(csv_path, encoding="utf-8")[:500]
+dataset = pd.read_csv(csv_path, encoding="utf-8")[:25]
 print(f"Loaded {len(dataset)} rows of data")
 
 train_dataset = dataset.sample(frac=0.8, random_state=0)
@@ -118,15 +119,14 @@ test_dataset = dataset.drop(train_dataset.index).drop(val_dataset.index)
 print(f"Loaded {len(test_dataset)} rows of test data")
 
 train_dataloader = summarizationDataLoader(train_dataset, tokenizer, max_len)
-print([x.shape for x in train_dataloader[1].values()])
 val_dataloader = summarizationDataLoader(val_dataset, tokenizer, max_len)
 test_dataloader = summarizationDataLoader(test_dataset, tokenizer, max_len)
 
 if torch.cuda.is_available():
         device = torch.device("cuda")
         torch.cuda.empty_cache()
-if torch.has_mps:
-    device = torch.device("mps")
+# if torch.has_mps:
+#     device = torch.device("mps")
 if not torch.cuda.is_available():
     device = torch.device("cpu")
     
@@ -142,10 +142,12 @@ class trainingBartSummarizer:
         device, 
         num_epochs=1,
         lr=5e-5,
-        optimizer=None
+        optimizer=None,
+        tokenizer=None,
     ):
         self.model = model
         self.max_len = max_len
+        self.tokenizer = tokenizer
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.test_dataloader = test_dataloader
@@ -171,8 +173,8 @@ class trainingBartSummarizer:
         epoch,
         index,
         mode,
-        total_epoch_loss,
-        elapsed_time,
+        prediction,
+        
     ):
         metric_dict = {}
         metric_dict["mode"] = mode
@@ -180,19 +182,12 @@ class trainingBartSummarizer:
         metric_dict["index"] = index
         metric_dict["loss"] = outputs[0].item()
         metric_dict["correct"] = (
-            self.train_dataloader.category[index]
+            self.train_dataloader.title[index]
             if mode == "train"
-            else self.val_dataloader.category[index]
+            else self.val_dataloader.title[index]
         )
-        metric_dict["predicted"] = self.config.id2label[
-            torch.argmax(outputs.logits, dim=1).item()
-        ]
-        metric_dict["true_positive"] = (
-            1 if metric_dict["correct_label"] == metric_dict["predicted_label"] else 0
-        )
-        metric_dict["total_epoch_loss"] = total_epoch_loss
-        metric_dict["elapsed_time"] = elapsed_time
-        
+        metric_dict["predicted"] = prediction
+        # metric_dict["perplexity"] = metrics(metric_dict["predicted"],metric_dict["correct"])    
         self.metric_list.append(metric_dict)
     
     # def create_epoch_statistics(self, current_epoch: int) -> None:
@@ -234,8 +229,8 @@ class trainingBartSummarizer:
             "loss",
             "correct",
             "predicted",
-            "perplexity",
-            "elapsed_time",
+            # "perplexity",
+            
         ]
         df = pd.DataFrame(self.metric_list, columns=headers)
         df.to_csv(save_path)
@@ -260,7 +255,6 @@ class trainingBartSummarizer:
         self.pbar = tqdm(total=self.num_steps_total)
         self.model.resize_token_embeddings(len(train_dataloader.tokenizer))
         self.model.to(device)
-        train_start = time.time()
         gc.collect()
         torch.cuda.empty_cache()
         self.step_count = 0
@@ -271,21 +265,20 @@ class trainingBartSummarizer:
             total_train_loss = 0
             self.model.train()
             for index, batch in enumerate(self.train_dataloader):
-                print(type(batch))
                 self.step_count += 1
                 self.model.zero_grad()
                 outputs = self.model(**batch.to(device))
+                prediction = self.model.generate(batch["input_ids"].to(device), max_length=200)
+                prediction = self.train_dataloader.tokenizer.batch_decode(prediction, skip_special_tokens=True, clean_up_tokenization_spaces=True)
                 loss = outputs[0]
                 # total_train_loss += loss.item()
                 loss.backward()
                 self.optimizer.step()
                 lr_scheduler.step()
                 current_time = time.time()
-                elapsed_time = current_time - train_start
                 self.tracking_outputs(
-                    outputs, epoch, index, "train", total_train_loss, elapsed_time)
+                    outputs, epoch, index, "train",prediction)
                 self.pbar.update(1)
-                self.pbar.set_postfix({"acc": self.accuracy})
             ### Validate
             self.model.eval()
             total_eval_loss = 0
@@ -296,13 +289,12 @@ class trainingBartSummarizer:
                     outputs = self.model(**batch.to(device))
                     loss = outputs[0]
                     total_eval_loss += loss.item()
-                elapsed_time = current_time - train_start
+                    prediction = self.model.generate(batch["input_ids"].to(device), max_length=200)
+                    prediction = self.val_dataloader.tokenizer.batch_decode(prediction, skip_special_tokens=True, clean_up_tokenization_spaces=True)
                 self.step_count += 1
                 self.tracking_outputs(
-                    outputs, epoch, index, "val", total_eval_loss, elapsed_time
-                )
+                    outputs, epoch, index, "val",prediction)
                 self.pbar.update(1)
-                self.pbar.set_postfix({"acc": self.accuracy})
            
             # if save_weights:
             #     self.model.save_pretrained(model_weights_dir)
@@ -310,7 +302,7 @@ class trainingBartSummarizer:
             #     logger.info(f"Saved model weights to {model_weights_dir}")
             # self.create_epoch_statistics()
         
-bart_summarizer = trainingBartSummarizer(model = model, max_len=max_len,train_dataloader=train_dataloader, val_dataloader=val_dataloader, test_dataloader=test_dataloader,device=device,num_epochs=1,lr=lr,optimizer=optimizer)
+bart_summarizer = trainingBartSummarizer(model = model, max_len=max_len,train_dataloader=train_dataloader, val_dataloader=val_dataloader, test_dataloader=test_dataloader,device=device,num_epochs=2,lr=lr,optimizer=optimizer,tokenizer=tokenizer)
 
 bart_summarizer.train()
 bart_summarizer.saving_stats(save_path=os.getcwd() + "/metrics.csv")
